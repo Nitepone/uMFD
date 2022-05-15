@@ -34,63 +34,77 @@
 
 #include "usb_descriptors.h"
 
-//--------------------------------------------------------------------+
-// MACRO CONSTANT TYPEDEF PROTYPES
-//--------------------------------------------------------------------+
-
-/* Blink pattern
- * - 250 ms  : device not mounted
- * - 1000 ms : device mounted
- * - 2500 ms : device is suspended
- */
-enum {
-    BLINK_NOT_MOUNTED = 250,
-    BLINK_MOUNTED = 1000,
-    BLINK_SUSPENDED = 2500,
+struct gpio_state {
+    bool last;
+    uint32_t hist;
 };
 
-static uint32_t blink_interval_ms = BLINK_NOT_MOUNTED;
+struct phy_btn_reg {
+    bool enabled_state;
+    uint8_t gpio_id;
+    uint32_t gpio_debounce_mask;
+    struct gpio_state gpio_state;
+};
+
+static uint32_t blink_interval_ms = 1500;
 uint32_t global_button_state = 0;
 uint8_t global_hat_state = 0;
 
 void led_blinking_task(void);
 void hid_task(void);
 
-void gpio_callback(unsigned int gpio, uint32_t events) {
-    int pullup = gpio_is_pulled_up(gpio);
-    int enable = pullup && (events & GPIO_IRQ_EDGE_FALL) ||
-                 !pullup && (events & GPIO_IRQ_EDGE_RISE);
-    int disable = pullup && (events & GPIO_IRQ_EDGE_RISE) ||
-                  !pullup && (events & GPIO_IRQ_EDGE_FALL);
-    if (enable) {
-        global_button_state |= (1 << gpio);
-        blink_interval_ms = 0;
-        board_led_write(true); // XXX debug
+void reg_btn(struct phy_btn_reg* btn_reg, uint8_t gpio_id, bool enabled_state) {
+    if (!btn_reg) {
+        return;
     }
-    if (disable) {
-        global_button_state &= ~(1 << gpio);
-        blink_interval_ms = 100;
+    memset(btn_reg, 0, sizeof(*btn_reg));
+    btn_reg->enabled_state = enabled_state;
+    btn_reg->gpio_id = gpio_id;
+    btn_reg->gpio_debounce_mask = 0x0f;
+}
+
+void poll_registered_gpios(struct phy_btn_reg* btn_arr, uint16_t btn_arr_len) {
+    struct phy_btn_reg* btn = NULL;
+    uint32_t raw_gpio = gpio_get_all();
+    uint32_t gpio_hist_window = 0;
+
+    for (btn = btn_arr; btn < (btn_arr + btn_arr_len); btn++) {
+        // check if button is supposed to change
+        btn->gpio_state.hist = (btn->gpio_state.hist << 1)
+                | ((raw_gpio >> btn->gpio_id) & 0x1);
+        gpio_hist_window = (btn->gpio_state.hist) & btn->gpio_debounce_mask;
+        if ( gpio_hist_window == 0 || gpio_hist_window == btn->gpio_debounce_mask ) {
+            if ((gpio_hist_window & 1) == btn->enabled_state) {
+                global_button_state |= (1 << btn->gpio_id);
+                blink_interval_ms = 1;
+            }
+            else {
+                global_button_state &= ~(1 << btn->gpio_id);
+                blink_interval_ms = 100;
+            }
+        }
     }
-    gpio_acknowledge_irq(gpio, events); // XXX Is this needed?
 }
 
 /*------------- MAIN -------------*/
 int main(void) {
+    struct phy_btn_reg btns[32];
+    int btn_cnt = 0;
     stdio_init_all(); // XXX Is this needed?
 
     // Setup for Pimironi Unicorn Buttons
     gpio_pull_up(12);
+    reg_btn(btns + btn_cnt, 12, 0);
+    btn_cnt++;
     gpio_pull_up(13);
+    reg_btn(btns + btn_cnt, 13, 0);
+    btn_cnt++;
     gpio_pull_up(14);
+    reg_btn(btns + btn_cnt, 14, 0);
+    btn_cnt++;
     gpio_pull_up(15);
-    gpio_set_irq_enabled_with_callback(
-        12, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
-    gpio_set_irq_enabled_with_callback(
-        13, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
-    gpio_set_irq_enabled_with_callback(
-        14, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
-    gpio_set_irq_enabled_with_callback(
-        15, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
+    reg_btn(btns + btn_cnt, 15, 0);
+    btn_cnt++;
 
     board_init();
     tusb_init();
@@ -98,7 +112,7 @@ int main(void) {
     while (1) {
         tud_task(); // tinyusb device task
         led_blinking_task();
-
+        poll_registered_gpios(btns, btn_cnt);
         hid_task();
     }
 
@@ -110,21 +124,25 @@ int main(void) {
 //--------------------------------------------------------------------+
 
 // Invoked when device is mounted
-void tud_mount_cb(void) { blink_interval_ms = BLINK_MOUNTED; }
+void tud_mount_cb(void) {
+    return;
+}
 
 // Invoked when device is unmounted
-void tud_umount_cb(void) { blink_interval_ms = BLINK_NOT_MOUNTED; }
+void tud_umount_cb(void) {
+    return;
+}
 
 // Invoked when usb bus is suspended
 // remote_wakeup_en : if host allow us  to perform remote wakeup
 // Within 7ms, device must draw an average of current less than 2.5 mA from bus
 void tud_suspend_cb(bool remote_wakeup_en) {
     (void)remote_wakeup_en;
-    blink_interval_ms = BLINK_SUSPENDED;
+    return;
 }
 
 // Invoked when usb bus is resumed
-void tud_resume_cb(void) { blink_interval_ms = BLINK_MOUNTED; }
+void tud_resume_cb(void) { blink_interval_ms = 1500; }
 
 //--------------------------------------------------------------------+
 // USB HID
@@ -215,7 +233,7 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
             } else {
                 // Caplocks Off: back to normal blink
                 board_led_write(false);
-                blink_interval_ms = BLINK_MOUNTED;
+                blink_interval_ms = 1500;
             }
         }
     }
