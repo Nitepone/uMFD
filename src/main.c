@@ -1,26 +1,7 @@
 /*
- * The MIT License (MIT)
+ * Pi Pico USB Direct Input Controller Implementation.
  *
- * Copyright (c) 2019 Ha Thach (tinyusb.org)
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- *
+ * Author: Luna Hart <nitepone>
  */
 
 #include <stdio.h>
@@ -34,6 +15,13 @@
 
 #include "usb_descriptors.h"
 
+#define MAX_DINPUT_BTN_ID 31
+
+struct dinput_btn_reg {
+    bool state;
+    uint8_t btn_id;
+};
+
 struct gpio_state {
     bool last;
     uint32_t hist;
@@ -44,16 +32,24 @@ struct phy_btn_reg {
     uint8_t gpio_id;
     uint32_t gpio_debounce_mask;
     struct gpio_state gpio_state;
+    struct dinput_btn_reg* d_btn;
 };
 
+
 static uint32_t blink_interval_ms = 1500;
-uint32_t global_button_state = 0;
+struct dinput_btn_reg global_d_btns[32];
+uint8_t global_d_btn_cnt = 0;
 uint8_t global_hat_state = 0;
 
 void led_blinking_task(void);
 void hid_task(void);
 
-void reg_btn(struct phy_btn_reg* btn_reg, uint8_t gpio_id, bool enabled_state) {
+void reg_dinput_btn(struct dinput_btn_reg* d_btn_reg, uint8_t btn_id) {
+    d_btn_reg->state = 0;
+    d_btn_reg->btn_id = btn_id;
+}
+
+void reg_btn(struct phy_btn_reg* btn_reg, struct dinput_btn_reg* d_btn_reg, uint8_t gpio_id, bool enabled_state) {
     if (!btn_reg) {
         return;
     }
@@ -61,6 +57,7 @@ void reg_btn(struct phy_btn_reg* btn_reg, uint8_t gpio_id, bool enabled_state) {
     btn_reg->enabled_state = enabled_state;
     btn_reg->gpio_id = gpio_id;
     btn_reg->gpio_debounce_mask = 0x0f;
+    btn_reg->d_btn = d_btn_reg;
 }
 
 void poll_registered_gpios(struct phy_btn_reg* btn_arr, uint16_t btn_arr_len) {
@@ -75,36 +72,53 @@ void poll_registered_gpios(struct phy_btn_reg* btn_arr, uint16_t btn_arr_len) {
         gpio_hist_window = (btn->gpio_state.hist) & btn->gpio_debounce_mask;
         if ( gpio_hist_window == 0 || gpio_hist_window == btn->gpio_debounce_mask ) {
             if ((gpio_hist_window & 1) == btn->enabled_state) {
-                global_button_state |= (1 << btn->gpio_id);
-                blink_interval_ms = 1;
+                btn->d_btn->state = true;
             }
             else {
-                global_button_state &= ~(1 << btn->gpio_id);
-                blink_interval_ms = 100;
+                btn->d_btn->state = false;
             }
         }
     }
 }
 
-/*------------- MAIN -------------*/
 int main(void) {
-    struct phy_btn_reg btns[32];
-    int btn_cnt = 0;
-    stdio_init_all(); // XXX Is this needed?
+    //struct dinput_btn_reg d_btns[32];
+    struct phy_btn_reg phy_btns[32];
+    int phy_btn_cnt = 0;
+    int d_btn_cnt = 0;
+    int i = 0;
+
+    stdio_init_all();
+
+    // Setup uFD buttons.
+    // Uses gpios 0-19
+    for (i = 0; i < 20; i++) {
+        gpio_pull_up(i);
+        reg_dinput_btn(global_d_btns + d_btn_cnt, i);
+        reg_btn(phy_btns + phy_btn_cnt, global_d_btns + d_btn_cnt, i, 0);
+        d_btn_cnt++;
+        phy_btn_cnt++;
+    }
+    global_d_btn_cnt = d_btn_cnt;
 
     // Setup for Pimironi Unicorn Buttons
-    gpio_pull_up(12);
-    reg_btn(btns + btn_cnt, 12, 0);
-    btn_cnt++;
-    gpio_pull_up(13);
-    reg_btn(btns + btn_cnt, 13, 0);
-    btn_cnt++;
-    gpio_pull_up(14);
-    reg_btn(btns + btn_cnt, 14, 0);
-    btn_cnt++;
-    gpio_pull_up(15);
-    reg_btn(btns + btn_cnt, 15, 0);
-    btn_cnt++;
+    //
+    //gpio_pull_up(12);
+    //reg_dinput_btn(global_d_btns + d_btn_cnt, 0);
+    //reg_btn(phy_btns + phy_btn_cnt, global_d_btns + d_btn_cnt, 12, 0);
+    //d_btn_cnt++; phy_btn_cnt++;
+    //gpio_pull_up(13);
+    //reg_dinput_btn(global_d_btns + d_btn_cnt, 1);
+    //reg_btn(phy_btns + phy_btn_cnt, global_d_btns + d_btn_cnt, 13, 0);
+    //d_btn_cnt++; phy_btn_cnt++;
+    //gpio_pull_up(14);
+    //reg_dinput_btn(global_d_btns + d_btn_cnt, 2);
+    //reg_btn(phy_btns + phy_btn_cnt, global_d_btns + d_btn_cnt, 14, 0);
+    //d_btn_cnt++; phy_btn_cnt++;
+    //gpio_pull_up(15);
+    //reg_dinput_btn(global_d_btns + d_btn_cnt, 3);
+    //reg_btn(phy_btns + phy_btn_cnt, global_d_btns + d_btn_cnt, 15, 0);
+    //d_btn_cnt++; phy_btn_cnt++;
 
     board_init();
     tusb_init();
@@ -112,7 +126,7 @@ int main(void) {
     while (1) {
         tud_task(); // tinyusb device task
         led_blinking_task();
-        poll_registered_gpios(btns, btn_cnt);
+        poll_registered_gpios(phy_btns, phy_btn_cnt);
         hid_task();
     }
 
@@ -149,9 +163,20 @@ void tud_resume_cb(void) { blink_interval_ms = 1500; }
 //--------------------------------------------------------------------+
 
 static int send_hid_report() {
+    struct dinput_btn_reg *d_btn;
+    uint32_t button_state = 0;
+
     // skip if hid is not ready yet
     if (!tud_hid_ready()) {
         return -1;
+    }
+
+    for (d_btn = global_d_btns; d_btn < global_d_btns + global_d_btn_cnt; d_btn++) {
+        if (d_btn->btn_id > MAX_DINPUT_BTN_ID || d_btn->btn_id < 0) {
+            // Do we want to check here? This takes time. We could just validate at registration..
+            continue;
+        }
+        button_state |= (d_btn->state << d_btn->btn_id);
     }
 
     hid_gamepad_report_t report = {.x = 50,
@@ -161,7 +186,7 @@ static int send_hid_report() {
                                    .rx = 0,
                                    .ry = 0,
                                    .hat = global_hat_state,
-                                   .buttons = global_button_state};
+                                   .buttons = button_state};
     tud_hid_report(REPORT_ID_GAMEPAD, &report, sizeof(report));
 }
 
@@ -183,7 +208,7 @@ void hid_task(void) {
 // Application can use this to send the next report
 // Note: For composite reports, report[0] is report ID
 void tud_hid_report_complete_cb(uint8_t instance, uint8_t const *report,
-                                uint8_t len) {
+                                uint16_t len) {
     (void)instance;
     (void)len;
 
