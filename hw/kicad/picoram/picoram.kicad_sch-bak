@@ -1,0 +1,89 @@
+(kicad_sch
+	(version 20231120)
+	(generator "eeschema")
+	(generator_version "8.0")
+	(uuid "3c68c555-99fc-4acf-b362-d8addd3be346")
+	(paper "A4")
+	(lib_symbols)
+	(sheet
+		(at 228.6 26.67)
+		(size 34.29 16.51)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "9b3f9efe-2108-43a0-90d8-24618b74043e")
+		(property "Sheetname" "USBC"
+			(at 228.6 25.9584 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "usbc.kicad_sch"
+			(at 228.6 43.7646 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "picoram"
+				(path "/3c68c555-99fc-4acf-b362-d8addd3be346"
+					(page "2")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 228.6 49.53)
+		(size 34.29 16.51)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "d4f9e523-581d-4827-8450-9072aa14da1b")
+		(property "Sheetname" "power"
+			(at 228.6 48.8184 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "power.kicad_sch"
+			(at 228.6 66.6246 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "picoram"
+				(path "/3c68c555-99fc-4acf-b362-d8addd3be346"
+					(page "3")
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+)

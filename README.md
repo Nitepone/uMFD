@@ -1,9 +1,15 @@
 # uMFD: A small button pad for Pico
 
-This is in a really rough state lol. But it lets me use my pico as a simple
-20 button gamepad for flight sims.
+![photo of hardware](docs/pics/v0.jpg)
 
-Probably will build this out a lil bit more? Eventually? This works though.
+This is a version 1.0 of my small mfd controller.
+
+This repo contains the blender files for the case, along with kicad files for
+the button carrier PCB, and the source code for the gamepad software.
+
+The completed project appears as an xinput device where each of the 20 buttons
+it its own digital input.
+
 
 ## Building
 
